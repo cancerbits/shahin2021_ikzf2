@@ -1,0 +1,142 @@
+```{r clusters markers}
+lapply(diff_cluster_out_all,bind_rows) %>%
+  bind_rows() %>%
+  dplyr::select(clust,clust_sample,meta_samples,gene,p_val,avg_logFC,p_val_adj) %>%
+  mutate(avg_logFC = round(avg_logFC,2)) %>% 
+  dplyr::rename(Cluster = "clust",
+         `High in` = "clust_sample",
+         `Low in` = "meta_samples",
+         `Gene Symbol` = "gene",
+         `Average logFC` = "avg_logFC",
+         `P-value` = "p_val",
+         `FDR-adjusted p-value` = "p_val_adj")%>%
+  mutate_if(is.numeric,~ifelse(.<=1e-300, 0, .) ) %>% 
+  write_csv(path = file.path(out_dir,"markers_out_all_raw.csv"))
+
+markers_all_comb %>%
+  mutate(sig_percent = n_individual/cmps_n,
+         min_lfc = round(min_lfc,2),
+         adj_pval = formatC(adj_pval,format = "e", digits = 2),
+         comb_pval = as.numeric(comb_pval) ) %>% 
+  dplyr::select(clust,gene,comb_pval,min_lfc,adj_pval,sig_percent) %>%
+  dplyr::rename(Cluster = "clust",
+       `Gene Symbol` = "gene",
+       `Minimum logFC` = "min_lfc",
+       `Combined p-value` = "comb_pval",
+       `FDR-adjusted p-value` = "adj_pval",
+       `Percentage of significant comparisons` = "sig_percent")%>%
+  mutate_if(is.numeric,~ifelse(.<=1e-300, 0, .) ) %>%
+  filter( `Percentage of significant comparisons` >= 0.75) %>%
+  write_csv(path = file.path(out_dir,"markers_out_all_combined.csv"))
+
+markers_all_sig %>%
+  write_csv(path = file.path(out_dir,"markers_out_all_sig.csv"))
+```
+
+```{r meta clusters markers}
+lapply(diff_meta_cluster_out_all,bind_rows) %>%
+  bind_rows() %>%
+  dplyr::select(clust,clust_sample,meta_samples,gene,p_val,avg_logFC,p_val_adj) %>%
+  mutate(avg_logFC = round(avg_logFC,2)) %>% 
+  dplyr::rename(`Meta-cluster` = "clust",
+         `High in` = "clust_sample",
+         `Low in` = "meta_samples",
+         `Gene Symbol` = "gene",
+         `Average logFC` = "avg_logFC",
+         `P-value` = "p_val",
+         `FDR-adjusted p-value` = "p_val_adj")%>%
+  mutate_all(~ifelse(str_detect(., "meta_"), str_replace_all(.,"meta_", ""), .)) %>%
+  mutate_if(is.numeric,~ifelse(.<=1e-300, 0, .) ) %>% 
+  write_csv(path = file.path(out_dir,"meta_marker_out_all_raw.csv"))
+
+markers_meta_all_comb  %>%
+  mutate(sig_percent = n_individual/cmps_n,
+         min_lfc = round(min_lfc,2),
+         comb_pval = as.numeric(comb_pval)
+         ) %>% 
+  dplyr::select(clust,gene,comb_pval,min_lfc,adj_pval,sig_percent) %>%
+  dplyr::rename(Cluster = "clust",
+       `Gene Symbol` = "gene",
+       `Minimum logFC` = "min_lfc",
+       `Combined p-value` = "comb_pval",
+       `FDR-adjusted p-value` = "adj_pval",
+       `Percentage of significant comparisons` = "sig_percent")%>%
+  mutate_all(~ifelse(str_detect(., "meta_"), str_replace_all(.,"meta_", ""), .)) %>%
+  mutate_if(is.numeric,~ifelse(.<=1e-300, 0, .) ) %>% 
+  write_csv(path = file.path(out_dir,"meta_marker_out_all_combined.csv"))
+
+markers_meta_all_sig %>%
+  write_csv(path = file.path(out_dir,"meta_marker_out_all_sig.csv"))
+```
+
+
+```{r 7 vs 1}
+diff_7_1_out %>%
+  bind_rows() %>% 
+  dplyr::select(clust_sample,meta_samples,gene,p_val,avg_logFC,p_val_adj) %>%
+  mutate(avg_logFC = round(avg_logFC,2)) %>% 
+  dplyr::rename(
+         `High in` = "clust_sample",
+         `Low in` = "meta_samples",
+         `Gene Symbol` = "gene",
+         `Average logFC` = "avg_logFC",
+         `P-value` = "p_val",
+         `FDR-adjusted p-value` = "p_val_adj") %>%
+  mutate_if(is.numeric,~ifelse(.<=1e-300, 0, .) ) %>% 
+  write_csv(path = file.path(out_dir,"diff_7_1_raw.csv"))
+
+genes_7_1_combined %>%
+  mutate(sig_percent = n/n_sample,
+         min_lfc = round(min_lfc,2),
+         comb_pval = as.numeric(comb_pval)
+         ) %>% 
+  dplyr::select(gene,comb_pval,min_lfc,adj_pval,sig_percent) %>%
+  dplyr::rename(
+       `Gene Symbol` = "gene",
+       `Minimum logFC` = "min_lfc",
+       `Combined p-value` = "comb_pval",
+       `FDR-adjusted p-value` = "adj_pval",
+       `Percentage of significant comparisons` = "sig_percent")%>%
+  mutate_if(is.numeric,~ifelse(.<=1e-300, 0, .) ) %>% 
+  write_csv(path = file.path(out_dir,"diff_7_1_combined.csv"))
+
+genes_7_1_sig %>% 
+  write_csv(path = file.path(out_dir,"diff_7_1_significant.csv"))
+```
+
+```{r mut vs wt}
+lapply(mut_wt_diff, bind_rows,.id="cmp_sample")%>%
+  bind_rows(.id = "cluster") %>% 
+  dplyr::select(cluster,clust_sample,meta_samples,gene,p_val,avg_logFC,p_val_adj) %>%
+  mutate(avg_logFC = round(avg_logFC,2)) %>% 
+  dplyr::rename(`Cluster` = "cluster",
+         `High in` = "clust_sample",
+         `Low in` = "meta_samples",
+         `Gene Symbol` = "gene",
+         `Average logFC` = "avg_logFC",
+         `P-value` = "p_val",
+         `FDR-adjusted p-value` = "p_val_adj")%>%
+  mutate_if(is.numeric,~ifelse(.<=1e-300, 0, .) ) %>% 
+  write_csv(path = file.path(out_dir,"diff_mut_wt_raw.csv"))
+
+diff_out_comb %>% 
+  bind_rows(.id = "cluster") %>%
+  dplyr::select(cluster,clust_sample,meta_samples,gene,comb_pval,min_lfc,adj_pval,n,n_sample) %>%
+        mutate(sig_percent = n/n_sample,
+               min_lfc = round(min_lfc,2),
+               n = NULL,
+               n_sample = NULL) %>% 
+  dplyr::rename(Cluster = "cluster",
+         `High in` = "clust_sample",
+         `Low in` = "meta_samples",
+       `Gene Symbol` = "gene",
+       `Minimum logFC` = "min_lfc",
+       `Combined p-value` = "comb_pval",
+       `FDR-adjusted p-value` = "adj_pval",
+       `Percentage of significant comparisons` = "sig_percent")%>%
+  mutate_if(is.numeric,~ifelse(.<=1e-300, 0, .) ) %>% 
+  write_csv(path = file.path(out_dir,"diff_mut_wt_combined.csv"))
+
+diff_genes %>% 
+  write_csv(path = file.path(out_dir,"diff_mut_wt_significant.csv"))
+```

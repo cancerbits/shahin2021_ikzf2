@@ -1,0 +1,197 @@
+---
+title: "IKZF2: scRNA-seq analysis"
+author: "Mohamed_Shoeb"
+output:
+ html_document:
+  code_folding: hide
+  toc: true
+  toc_float: false
+  theme: united
+always_allow_html: true
+---
+
+```{r setup, include=FALSE}
+#project setup
+project_name <- "ikzf2"
+base_dir <- "/data_synology_rg3/cancerbits"
+out_dir <- file.path(base_dir,"out",project_name)
+input_dir <- file.path(base_dir,"data",project_name)
+data_dir <- file.path(input_dir, "data")
+metadata_dir <- file.path(input_dir, "metdata")
+genome_dir <- file.path(base_dir,"resources","genomes")
+#report options
+knitr::opts_chunk$set(echo = TRUE,
+                      eval = TRUE,
+                      cache.lazy = FALSE,
+                      message=FALSE,
+                      warning=FALSE,
+                      dev = "png",
+                      cache.path = file.path(out_dir,"report","cache/"),
+                      fig.path = file.path(out_dir,"report","files/"))
+options(width=100)
+
+```
+
+
+```{r run in the terminal, eval = FALSE, include = FALSE}
+rmarkdown::render(output_file = stringr::str_replace_all(date(),c(" +"="-", ":"="_")),
+                  input = here::here("src/initialize.Rmd"),
+                  output_dir = file.path(out_dir,"report","html/"))
+```
+#Initialization
+### a- load libraries
+
+```{r libraries, message=FALSE}
+library("gghighlight")
+library("Seurat")
+library("tidyverse")
+library("magrittr")
+library("cowplot")
+library("BiocParallel")
+library("gridExtra")
+library("ezRun")
+library("glue")
+library("here")
+library("GGally")
+library("kableExtra")
+library(SingleR)
+library(harmony)
+library(fs)
+library(scran)
+library(BiocParallel)
+library(MAST)
+library(EnrichmentBrowser)
+library(org.Hs.eg.db)
+library(patchwork)
+library(ggridges)
+library(ggrastr)
+library(RColorBrewer)
+library("DESeq2")
+```
+
+```{r functions, include=FALSE, eval=TRUE}
+knitr::read_chunk("functions.R")
+
+```
+
+```{r create_functions}
+
+```
+
+### c- read data
+
+```{r read_input, include=FALSE}
+knitr::read_chunk("read_input.R")
+```
+
+```{r read_metadata, cache=TRUE}
+```
+
+```{r find_input_path, cache=TRUE}
+```
+
+```{r read_10x, cache=TRUE}
+```
+
+```{r read_smart_seq, cache=TRUE}
+
+```
+
+### c- Set parameters
+
+```{r parameters, include=FALSE}
+knitr::read_chunk("parameters.R")
+```
+
+```{r parameter_list}
+
+```
+
+```{r marker_genes}
+
+```
+
+```{r colors}
+
+```
+
+```{r patients_list}
+
+```
+
+
+### d- expand metdata
+```{r expand_metadat, include=FALSE}
+knitr::read_chunk("expand_metadata.R")
+```
+
+```{r add_clinical_features}
+
+```
+
+### e- quality control
+
+```{r quality_control, include=FALSE}
+knitr::read_chunk("quality_control.R")
+```
+
+```{r calculate_percent_mt}
+```
+
+```{r find_variable_features, cache=TRUE}
+
+```
+
+```{r calculate_doublet, cache=TRUE}
+
+```
+
+```{r filter_cell}
+
+```
+
+```{r filter_genes_low}
+
+```
+
+### SMART-seq analysis
+```{r smart_seq_analysis, include=FALSE}
+knitr::read_chunk("smart_seq_analysis.R")
+```
+
+```{r SMART_seq_split_celltype}
+
+```
+
+```{r run_deseq_SMART_seq, cache=TRUE}
+
+```
+
+```{r compare_bio_rep, cache=TRUE} 
+
+```
+
+````{r heatmap_of_common_DEGs}
+
+````
+
+```{r enricher_analysis,cache=TRUE} 
+
+```
+
+### scRNA-seq
+```{r, child=here("src/scrna_analysis_harmony_5.Rmd"), include=TRUE, eval = TRUE}
+
+```
+
+```{r, child=here("src/scrna_analysis_harmony_5_comparisons.Rmd"), include=TRUE, eval = TRUE}
+
+```
+
+```{r, child=here("src/plots.Rmd"), include=TRUE, eval = TRUE}
+
+```
+
+```{r, child=here("src/tables.Rmd"), include=TRUE, eval = TRUE}
+
+```

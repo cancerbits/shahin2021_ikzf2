@@ -1,0 +1,247 @@
+#### Cluster markers
+Detect marker genes for each cluster by comparing cells belonging to each individual within a cluster to the rest of the cells belonging to the other clusters. Within each cluster, genes are combined across comparisons and only those that (1) pass filteration thresholds, (2) show cosistent regulation across comparisons, and (3) only detected in a single cluster are labeled as markers.
+
+```{r patient-stratified comparison of each cluster to the rest, cache=TRUE}
+Idents(seurat_obj_sub_5) <- seurat_obj_sub_5@meta.data$sample_cluster
+
+cmp_cluster_all <- seurat_obj_sub_5@meta.data %>%
+  mutate_all(as.character) %>%
+  dplyr::count(SCT_snn_res.0.2,sample_cluster) %>%
+  filter(n >= min_cell_n) %>%
+  mutate(n=NULL,
+         other = list(unique(sample_cluster))) %>% 
+  unnest(other)%>% 
+  mutate(orig.ident = str_replace(other,"^.+_","")) %>% 
+  filter(str_extract(other,"^.+_") != str_extract(sample_cluster,"^.+_")) %>% 
+  group_by(SCT_snn_res.0.2,sample_cluster,orig.ident) %>%
+  summarise(sample = list(other)) %>% 
+  ungroup() %>% 
+  mutate(orig.ident = NULL)
+
+
+diff_cluster_out_all <- map2(cmp_cluster_all[[2]],cmp_cluster_all[[3]],function(clust_sample, meta_samples){
+    message(clust_sample, " vs ", paste(meta_samples,collapse = ", "))
+
+  FindMarkers(seurat_obj_sub_5,
+              ident.1 = clust_sample,
+              ident.2 = meta_samples,
+              only.pos = TRUE,
+              test.use = diff_test,
+              verbose = FALSE,
+              features= seurat_obj_sub_5@assays$SCT@data %>% rownames %>% str_subset("^RP[SL]",negate = TRUE)) %>%
+    rownames_to_column("gene") %>% 
+    add_column(clust_sample = clust_sample,
+               n_meta = length(meta_samples),
+               clust = str_sub(unique(str_extract(clust_sample,"^.+_")), end = -2),
+               individual = unique(str_replace(meta_samples,"^.+_","")),
+               meta_samples = paste(meta_samples, collapse = ", ")
+               )
+    }) 
+```
+
+```{r markers_all}
+markers_all_comb <- diff_cluster_out_all %>% 
+  bind_rows() %>%
+  mutate(clust = str_extract(clust_sample,"^.+_"),
+         clust = str_replace(clust,"_$","")) %>%
+  group_by(clust) %>% 
+  mutate(cluster_n = n_distinct(clust_sample),
+         meta_n = n_distinct(individual),
+         n_meta = NULL,
+         cmps_n = meta_n*cluster_n) %>% 
+  ungroup() %>% 
+  group_by(clust,gene) %>%
+  summarise(comb_pval = f_pval(p_val),
+            min_lfc = avg_logFC[which.min(abs(avg_logFC))],
+            logfc_dir = sum(avg_logFC>0),
+            n_individual = n(),
+            cmps_n = unique(cmps_n)) %>% 
+  ungroup() %>%
+  mutate(adj_pval = p.adjust(comb_pval,"BH")) 
+```
+
+```{r significant cluster markers}
+markers_all_sig <- markers_all_comb %>%
+  filter(adj_pval < fdr_threshold,
+         logfc_dir %in% c(cmps_n,0),
+         abs(min_lfc) >= lfc_threshold,
+         n_individual == cmps_n) %>% 
+  arrange(cluster,desc(min_lfc)) 
+```
+
+#### Meta-clusters markers
+
+```{r meta-clusters markers using a stratified approach, cache=TRUE}
+Idents(seurat_obj_sub_5) <- seurat_obj_sub_5@meta.data$sample_metacluster
+
+cmp_meta_cluster_all <- seurat_obj_sub_5@meta.data %>%
+  mutate_all(as.character) %>%
+  dplyr::count(meta_cluster,sample_metacluster) %>%
+  filter(n >= min_cell_n) %>%
+  mutate(n=NULL,
+         other = list(unique(sample_metacluster))) %>% 
+  unnest(other)%>% 
+  mutate(orig.ident = str_replace(other,"^.+_","")) %>% 
+  filter(str_extract(other,"^.+_")!=str_extract(sample_metacluster,"^.+_")) %>% 
+  group_by(meta_cluster,sample_metacluster,orig.ident) %>%
+  summarise(sample = list(other)) %>% 
+  ungroup() %>% 
+  mutate(orig.ident = NULL)
+
+diff_meta_cluster_out_all <- map2(cmp_meta_cluster_all[[2]],cmp_meta_cluster_all[[3]],function(clust_sample, meta_samples){
+  message(clust_sample, " vs ", paste(meta_samples,collapse = ", "))
+  FindMarkers(seurat_obj_sub_5,
+              ident.1 = clust_sample,
+              ident.2 = meta_samples,
+              only.pos = TRUE,
+              test.use = diff_test,
+              verbose = FALSE,
+              features= seurat_obj_sub_5@assays$SCT@data %>% rownames %>% str_subset("^RP[SL]",negate = TRUE)) %>%
+    rownames_to_column("gene") %>% 
+    add_column(clust_sample=clust_sample,
+               n_meta = length(meta_samples),
+               clust = str_sub(unique(str_extract(clust_sample,"^.+_")), end = -2),
+               individual = unique(str_replace(meta_samples,"^.+_","")),
+               meta_samples = paste(meta_samples, collapse = ", ")
+               )
+    }) 
+
+markers_meta_all_comb <- diff_meta_cluster_out_all %>% 
+  bind_rows() %>% 
+  mutate(clust = str_sub(str_extract(clust_sample,".+_"),1,-2)) %>%
+  group_by(clust) %>% 
+  mutate(cluster_n = n_distinct(clust_sample),
+         meta_n = n_distinct(individual),
+         n_meta = NULL,
+         cmps_n = meta_n*cluster_n) %>% 
+  ungroup() %>% 
+  group_by(clust,gene) %>%
+  summarise(comb_pval = f_pval(p_val),
+            min_lfc = avg_logFC[which.min(abs(avg_logFC))],
+            n_individual = n(),
+            cmps_n = unique(cmps_n)) %>% 
+  ungroup() %>%
+  mutate(adj_pval = p.adjust(comb_pval,"BH"))
+```
+
+#### Compare clusters 7 and 1
+
+The same approach used to detect cluster markers is followed to compare patient's cells in cluster 7 to normal donors cells in cluster 1 . 
+
+```{r compare clusters 7 and 1, cache=TRUE}
+Idents(seurat_obj_sub_5) <- seurat_obj_sub_5@meta.data$sample_cluster
+
+cmp_7_1 <- seurat_obj_sub_5@meta.data %>%
+  mutate_all(as.character) %>%
+  dplyr::count(SCT_snn_res.0.2,sample_cluster) %>%
+  filter(SCT_snn_res.0.2 %in% c("2_a","5"),
+         n >= min_cell_n) %$%
+  split(sample_cluster,paste0("clust_",SCT_snn_res.0.2)) %>%
+  expand.grid()
+
+diff_7_1_out <- map2(cmp_7_1[,"clust_2_a"],cmp_7_1[,"clust_5"], function(nd,ptn){
+  FindMarkers(seurat_obj_sub_5,
+              ident.1 = ptn,
+              ident.2 = nd,
+              test.use = diff_test,
+              verbose = FALSE,
+              features= seurat_obj_sub_5@assays$SCT@data %>% rownames %>% str_subset("^RP[SL]",negate = TRUE)) %>%
+    rownames_to_column("gene") %>% 
+    mutate(cmps=paste(ptn,nd, sep = " vs "),
+           clust_sample = ptn,
+           meta_samples = nd)
+  }) %>% 
+  setNames(cmp_7_1[,"clust_2_a"])
+```
+
+```{r 7 vs 1 combined}
+genes_7_1_combined <- diff_7_1_out %>% 
+    bind_rows(.id = "cmp_sample") %>%
+    mutate(sample_n = n_distinct(cmp_sample)) %>% 
+    group_by(gene) %>%
+    summarise(comb_pval = f_pval(p_val),
+              min_lfc = avg_logFC[which.min(abs(avg_logFC))],
+              n = n(),
+              logfc_dir = sum(avg_logFC>0),
+              n_sample = unique(sample_n)) %>%
+    ungroup() %>%
+    mutate(adj_pval = p.adjust(comb_pval,"BH"))
+```
+
+```{r 7 vs 1 significant, eval=FALSE}
+genes_7_1_sig <- genes_7_1_combined %>%
+    filter(logfc_dir %in% c(n_sample,0),
+           adj_pval < fdr_threshold,
+           abs(min_lfc) >= lfc_threshold,
+           n == n_sample) %>% 
+    arrange(desc(min_lfc)) 
+```
+
+#### Differential expression analysis within each cluster
+
+Patient's cells are compared to normal donor cells within each cluster. 
+
+```{r mut vs wt, cache=TRUE}
+Idents(seurat_obj_sub_5) <- seurat_obj_sub_5@meta.data$sample_cluster
+
+lst_p_clust <- seurat_obj_sub_5@meta.data %>%
+  mutate_all(as.character) %>%
+  group_by(SCT_snn_res.0.2, sample_cluster) %>% 
+  summarise(n = n(),
+            geno = unique(Genotype)) %>%
+  ungroup() %>%
+  filter(n >=min_cell_n) %>% 
+  group_by(SCT_snn_res.0.2) %>% 
+  filter(n_distinct(geno) == 2) %>% 
+  ungroup() %$% 
+  split(sample_cluster, SCT_snn_res.0.2,geno)
+
+mut_wt_diff <- map2(names(lst_p_clust),lst_p_clust,function(cluster, clust_samples){
+  samples <- str_subset(clust_samples, "P3") 
+  cmp_samples <- str_subset(clust_samples,  "P3",negate = TRUE)
+  message("cluster:", cluster)
+  lapply(cmp_samples,function(cmp_id){
+    message(cmp_id)
+    FindMarkers(seurat_obj_sub_5,
+                ident.1 = samples,
+                ident.2 = cmp_id,
+                test.use = diff_test,
+              verbose = FALSE,
+              features= seurat_obj_sub_5@assays$SCT@data %>% rownames %>% str_subset("^RP[SL]",negate = TRUE)) %>%
+      rownames_to_column("gene") %>% 
+      mutate(clust_sample = str_replace(samples,"^.+_",""),
+             meta_samples = str_replace(cmp_id,"^.+_",""),
+             clust = str_sub(str_extract(cmp_id,"^.+_"),end = -2)
+             )
+    }) %>% setNames(cmp_samples)
+  }) %>% setNames(names(lst_p_clust))
+```
+
+```{r mut vs wt combined}
+diff_out_comb <- lapply(mut_wt_diff, function(clust_diff){
+  clust_diff%>%
+    bind_rows(.id = "cmp_sample") %>%
+    mutate(sample_n = n_distinct(meta_samples)) %>% 
+    group_by(gene) %>%
+    summarise(comb_pval = f_pval(p_val),
+              min_lfc =  avg_logFC[which.min(abs(avg_logFC))],
+              n = n(),
+              logfc_dir = sum(avg_logFC>0),
+              n_sample = unique(sample_n),
+              meta_samples = paste(c(meta_samples),collapse = ","),
+              clust_sample = unique(clust_sample)) %>%
+    ungroup() %>% 
+    mutate(adj_pval = p.adjust(comb_pval,"BH"))
+  }) %>%
+  bind_rows(.id = "cluster")
+```
+```{r mut vs wt significant}
+diff_genes <- diff_out_comb %>%
+  bind_rows(.id = "cluster") %>% 
+  filter(!str_sub(gene,start = 1,3) %in% c("RPS","RPL"),
+         n == n_sample,
+         logfc_dir %in% c(n_sample,0),
+         adj_pval < fdr_threshold,
+         abs(min_lfc) >= lfc_threshold) %>% 
+  arrange(desc(min_lfc))
+```

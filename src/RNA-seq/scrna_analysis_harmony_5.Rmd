@@ -1,0 +1,64 @@
+```{r harmony_5:subset samples}
+
+subset_samples <- clindata %>% 
+  filter(`Sample Name` == "P" | str_detect(`Sample Name`,"^C")) %>% 
+  pull(`Sample Name`)
+seurat_obj_sub_5 <- subset(seurat_obj, subset = orig.ident %in% subset_samples)
+```
+
+```{r harmony_5:transformation,cache=TRUE}
+seurat_obj_sub_5 <- SCTransform(seurat_obj_sub_5,
+                          vars.to.regress = "percent_mt",
+                          return.only.var.genes = F,
+                          verbose = FALSE)
+```
+
+```{r harmony_5:dimensionality reduction,cache=TRUE}
+seurat_obj_sub_5 <- RunPCA(seurat_obj_sub_5, verbose = FALSE,assay='SCT')
+```
+
+```{r harmony_5:integration,cache=TRUE}
+seurat_obj_sub_5 <- RunHarmony(seurat_obj_sub_5,
+                         group.by.vars = "orig.ident",
+                         assay.use="SCT")
+```
+
+```{r harmony_5:define clusters,cache=TRUE}
+seurat_obj_sub_5 <- FindNeighbors(seurat_obj_sub_5, reduction = "harmony")
+
+for(res in c(0.2, 0.4, 0.6, 0.8, 1.0)){
+  seurat_obj_sub_5 <- FindClusters(seurat_obj_sub_5, resolution = res,
+                          verbose = FALSE)
+  }
+```
+
+```{r harmony_5:UMAP}
+seurat_obj_sub_5 <- RunUMAP(seurat_obj_sub_5, reduction = "harmony", dims = seuratAnalysisCfg$PCA_DIMS)
+```
+
+```{r harmony_5:}
+#rename clusters and metaclusters
+seurat_obj_sub_5@meta.data$SCT_snn_res.0.2 <- recode(seurat_obj_sub_5@meta.data$SCT_snn_res.0.2,
+                                            `0`="1_a",
+                                            `5` = "1_b",
+                                            `1` = "2_a",
+                                            `3` = "2_b",
+                                            `2` = "2_c",
+                                            `4` = "3",
+                                            `6` = "4",
+                                            `7` = "5",
+                                            `8` = "6",
+                                            `9` = "7"
+                                            ) 
+#order clusters and metaclusters
+seurat_obj_sub_5@meta.data$SCT_snn_res.0.2 <- seurat_obj_sub_5@meta.data %>%
+  mutate(SCT_snn_res.0.2 = forcats::fct_relevel(SCT_snn_res.0.2, "1_a","2_a","2_b","2_c","3","1_b","4","5","6","7"))  %$% 
+  SCT_snn_res.0.2
+
+#set colors for clusters and metaclusters
+cols <- c(`1_a`="#238b45", `1_b`="#c7e9c0", `4`= "#fd8d3c",
+                `2_a`="#c6dbef", `2_b`="#4292c6", `2_c`= "#08519c",`5`="#FF00FF",
+                `4`="#fed976", `3`="#fed976", `6`="#bd0026",
+                `7`="#fb8072",`meta_1`= "#74c476", `meta_2`="#4292c6",
+                `I325V-Hom`="#D95F02", WT="grey70",pt_cols)
+```
